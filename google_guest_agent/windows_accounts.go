@@ -33,6 +33,8 @@ import (
 	"strconv"
 	"strings"
 
+	"golang.org/x/sys/windows"
+
 	"github.com/GoogleCloudPlatform/guest-agent/google_guest_agent/cfg"
 	"github.com/GoogleCloudPlatform/guest-agent/metadata"
 	"github.com/GoogleCloudPlatform/guest-agent/utils"
@@ -117,10 +119,28 @@ func printCreds(creds *credsJSON) error {
 	return err
 }
 
+func getLocalizedAdministratorsGroupName() (string, error) {
+	sid, err := windows.StringToSid("S-1-5-32-544")
+	if err != nil {
+		return "", fmt.Errorf("failed to convert SID string: %w", err)
+	}
+
+	name, _, _, err := sid.LookupAccount("")
+	if err != nil {
+		return "", fmt.Errorf("failed to lookup account name: %w", err)
+	}
+
+	return name, nil
+}
+
 func createOrResetPwd(ctx context.Context, k metadata.WindowsKey) (*credsJSON, error) {
 	pwd, err := newPwd(k.PasswordLength)
 	if err != nil {
 		return nil, fmt.Errorf("error creating password: %v", err)
+	}
+	adminGroup, err := getLocalizedAdministratorsGroupName()
+	if err != nil {
+		return nil, fmt.Errorf("error getting localized administrators group name: %v", err)
 	}
 	if _, err := userExists(k.UserName); err == nil {
 		logger.Infof("Resetting password for user %s", k.UserName)
@@ -128,7 +148,7 @@ func createOrResetPwd(ctx context.Context, k metadata.WindowsKey) (*credsJSON, e
 			return nil, fmt.Errorf("error running resetPwd: %v", err)
 		}
 		if k.AddToAdministrators != nil && *k.AddToAdministrators {
-			if err := addUserToGroup(ctx, k.UserName, "Administrators"); err != nil {
+			if err := addUserToGroup(ctx, k.UserName, adminGroup); err != nil {
 				return nil, fmt.Errorf("error running addUserToGroup: %v", err)
 			}
 		}
@@ -138,7 +158,7 @@ func createOrResetPwd(ctx context.Context, k metadata.WindowsKey) (*credsJSON, e
 			return nil, fmt.Errorf("error running createUser: %v", err)
 		}
 		if k.AddToAdministrators == nil || *k.AddToAdministrators {
-			if err := addUserToGroup(ctx, k.UserName, "Administrators"); err != nil {
+			if err := addUserToGroup(ctx, k.UserName, adminGroup); err != nil {
 				return nil, fmt.Errorf("error running addUserToGroup: %v", err)
 			}
 		}
