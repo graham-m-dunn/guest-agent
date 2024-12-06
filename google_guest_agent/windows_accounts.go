@@ -120,7 +120,8 @@ func printCreds(creds *credsJSON) error {
 }
 
 func getLocalizedAdministratorsGroupName() (string, error) {
-	sid, err := windows.StringToSid("S-1-5-32-544")
+	// https://learn.microsoft.com/en-us/windows/win32/secauthz/well-known-sids
+	sid, err := windows.StringToSid("S-1-5-32-544") 
 	if err != nil {
 		return "", fmt.Errorf("failed to convert SID string: %w", err)
 	}
@@ -175,12 +176,16 @@ func createSSHUser(ctx context.Context, user string) error {
 	if _, err := userExists(user); err == nil {
 		return nil
 	}
+	adminGroup, err := getLocalizedAdministratorsGroupName()
+	if err != nil {
+		return fmt.Errorf("error getting localized administrators group name: %v", err)
+	}
 	logger.Infof("Creating user %s", user)
 	if err := createUser(ctx, user, pwd, ""); err != nil {
 		return fmt.Errorf("error running createUser: %v", err)
 	}
 
-	if err := addUserToGroup(ctx, user, "Administrators"); err != nil {
+	if err := addUserToGroup(ctx, user, adminGroup); err != nil {
 		return fmt.Errorf("error running addUserToGroup: %v", err)
 	}
 	return nil
